@@ -178,6 +178,10 @@ def visualize():
     idx = random.randint(0, N_training-1)
     img_training = np.load(os.path.join(dataset_dir, "train", "image", f"image_{idx:05d}.npy"), allow_pickle=True)
 
+    lbl_training = np.load(os.path.join(dataset_dir, "train", "mask", f"mask_{idx:05d}.npy"), allow_pickle=True)
+    #seg[0,0] = 90
+    seg_clr = clr.label2rgb(lbl_training, image=None, colors=None, alpha=0.3, bg_label=0, bg_color=(0, 0, 0))
+
     print("Training set:")
     print("# of training pairs: ", N_training, "range: ", img_training.min(), img_training.max())
     print("# of SEGs:", len(glob.glob(os.path.join(dataset_dir, "train", "mask", "*.npy"))))
@@ -188,14 +192,10 @@ def visualize():
     print("Validation set:")
     print("# of validation pairs:", N_validation, "range:", img_validation.min(), img_validation.max())
 
-    lbl_training = np.load(os.path.join(dataset_dir, "train", "mask", f"mask_{idx:05d}.npy"), allow_pickle=True)
-    #seg[0,0] = 90
-    seg_clr = clr.label2rgb(lbl_training, image=None, colors=None, alpha=0.3, bg_label=0, bg_color=(0, 0, 0))
-
     plt.figure(figsize=[8,6])
 
     plt.subplot(1,2,1)
-    plt.imshow(img_training)
+    plt.imshow(img_training, cmap="gray")
     plt.title('Training image')
 
     plt.subplot(1,2,2)
@@ -203,10 +203,10 @@ def visualize():
     plt.title('Training label')
 
     plt.tight_layout()
-    plt.savefig('sample_pairs.png', dpi=200, transparent=False)
+    plt.savefig('out/sample_pairs.png', dpi=200, transparent=False)
     plt.show()
 
 
 if __name__ == '__main__':
-    main()
+    #main()
     visualize()
