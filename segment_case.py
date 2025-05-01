@@ -55,11 +55,11 @@ for data in ["test", "train"]:
             original_size = img.shape
 
 # container for all metrics
-s_y = original_size[0]/img_size[0]
-s_x = original_size[1]/img_size[1]
+s_x = original_size[0]/img_size[0]
+s_y = original_size[1]/img_size[1]
 all_metrics = []
 
-for data in ["test", "train"]:
+for data in ["train", "test"]:
     for subdir in ["01","02"]:
         for nframe, name in enumerate(sorted(os.listdir(os.path.join(data_dir, data, case, subdir)))):
             # ── 1) load & normalize ─────────────────────
@@ -109,19 +109,21 @@ for data in ["test", "train"]:
                 if p.area <= MIN_CELL_PIX:
                     continue
 
-                cy, cx = (PIXEL_SIZE_UM * p.centroid[0] * s_x, PIXEL_SIZE_UM * p.centroid[1] * s_y)
+                cx, cy = (p.centroid[0] * s_x, p.centroid[1] * s_y)
                 A = p.area * (PIXEL_SIZE_UM * s_y) * (PIXEL_SIZE_UM * s_x)
-                P = p.perimeter * (PIXEL_SIZE_UM * s_x) # assuming s_x == s_y
+                P = p.perimeter * PIXEL_SIZE_UM * np.sqrt(s_x) * np.sqrt(s_y)
+                minr,minc,maxr,maxc=p.bbox
 
+                s_di = subdir if data == "train" else f"{int(subdir) + 2:02d}"
                 frame_metrics.append({
                     "frame":     name,
                     "time":      nframe * TIME_STEP_MIN,
-                    "subdir":    subdir,
+                    "subdir":    s_di,
                     "label_id":  p.label,
                     "centroid":  (float(cx), float(cy)), 
                     "area":      float(A),
                     "perimeter": float(P),
-                    "bbox":      p.bbox,            # optional
+                    "bbox":      (minr*s_x, minc*s_y, maxr*s_x, maxc*s_y),
                 })
 
             all_metrics.extend(frame_metrics)
