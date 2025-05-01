@@ -55,6 +55,8 @@ for data in ["test", "train"]:
             original_size = img.shape
 
 # container for all metrics
+s_y = original_size[0]/img_size[0]
+s_x = original_size[1]/img_size[1]
 all_metrics = []
 
 for data in ["test", "train"]:
@@ -107,9 +109,9 @@ for data in ["test", "train"]:
                 if p.area <= MIN_CELL_PIX:
                     continue
 
-                cy, cx = (PIXEL_SIZE_UM * p.centroid[0] * original_size[0] /  img_size[0], PIXEL_SIZE_UM * p.centroid[1] * original_size[1] /  img_size[1])
-                A      = PIXEL_SIZE_UM**2 * p.area        # pixel count
-                P      = PIXEL_SIZE_UM * p.perimeter   # approximate contour length
+                cy, cx = (PIXEL_SIZE_UM * p.centroid[0] * s_x, PIXEL_SIZE_UM * p.centroid[1] * s_y)
+                A = p.area * (PIXEL_SIZE_UM * s_y) * (PIXEL_SIZE_UM * s_x)
+                P = p.perimeter * (PIXEL_SIZE_UM * s_x) # assuming s_x == s_y
 
                 frame_metrics.append({
                     "frame":     name,
