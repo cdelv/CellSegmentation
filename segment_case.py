@@ -83,13 +83,18 @@ for data in ["test", "train"]:
             mask_bin = (score > th).astype(np.uint8)
 
             # ── 5) optionally visualize raw, score, binary ──
-            if VISUALIZE:
+            if VISUALIZE or nframe == 0:
                 fig, (a0,a1,a2) = plt.subplots(1,3,figsize=(12,4))
                 a0.imshow(img_resized, cmap="gray");    a0.set_title("Input")
                 a1.imshow(score,      cmap="viridis"); a1.set_title(f"Prediction")
                 a2.imshow(mask_bin,   cmap="gray")    ; a2.set_title(f"Binarization")
                 for ax in (a0,a1,a2): ax.axis("off")
-                plt.tight_layout(); plt.show()
+
+                if nframe == 0:
+                    plt.savefig(os.path.join(out_dir, "prediction.png"), dpi=200)
+
+                plt.tight_layout()
+                plt.show()
 
             # ── 6) extract & filter connected components ──
             labels = label(mask_bin, connectivity=CONNECTIVITY)
@@ -120,7 +125,7 @@ for data in ["test", "train"]:
             all_metrics.extend(frame_metrics)
 
             # ── 7) optionally visualize a few cell masks ──
-            if VISUALIZE and frame_metrics:
+            if VISUALIZE and frame_metrics or nframe == 0:
                 n = len(frame_metrics)
                 fig, axes = plt.subplots(1, n, figsize=(4*n,4))
                 for i, mets in enumerate(frame_metrics[:n]):
@@ -129,10 +134,15 @@ for data in ["test", "train"]:
                     ax = axes[i]
                     ax.imshow(cell_mask, cmap="gray")
                     ax.set_title(
-                        f"Cell {lbl}\nA={mets['area']} P={mets['perimeter']:.1f}"
+                        f"Cell {lbl}\nA={mets['area']:.1f} μm^2 P={mets['perimeter']:.1f} μm"
                     )
                     ax.axis("off")
-                plt.tight_layout(); plt.show()
+
+                if nframe == 0:
+                    plt.savefig(os.path.join(out_dir, "cell_mask.png"), dpi=200)
+
+                plt.tight_layout()
+                plt.show()
 
 
 df = pd.DataFrame(all_metrics)
