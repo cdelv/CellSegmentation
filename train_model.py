@@ -10,9 +10,9 @@ from torch.utils.data import Dataset, DataLoader, random_split
 import torch.optim as optim
 import torch.nn as nn
 import torch.nn.functional as F
+from tqdm.auto import tqdm
 
 from skimage.transform import resize
-
 from XBNet import XBNet
 
 if torch.cuda.is_available():
@@ -25,7 +25,9 @@ else:
 out_dir = os.path.join("out")
 data_dir = os.path.join("dataset", "train")
 img_size = (256, 256)
+os.makedirs(out_dir, exist_ok=True)
 
+# Load data
 class CellSegmentationDataset(Dataset):
     def __init__(self, image_dir, mask_dir, img_size = img_size):
         """
@@ -52,45 +54,45 @@ class CellSegmentationDataset(Dataset):
         img = np.load(self.image_paths[idx], allow_pickle=True).astype(np.float32) # shape: (1, H, W)
         msk = np.load(self.mask_paths[idx], allow_pickle=True).astype(np.float32)  # shape: (H, W)
         h, w = img.shape
-        aug = random.randrange(7)
+        aug = random.randrange(6)
 
-        if aug != 0:
+        if random.random() < 0.4:
             assert h >= self.img_size[0] and w >= self.img_size[1], "crop_size larger than image"
             r1 = random.randint(0, h - self.img_size[0])
             c1 = random.randint(0, w - self.img_size[1])
             img = img[r1:r1 + self.img_size[0], c1:c1 + self.img_size[1]]
             msk = msk[r1:r1 + self.img_size[0], c1:c1 + self.img_size[1]]
-
-        match aug:
-            case 0:
-                img = resize(
+        else:
+            img = resize(
                     img,
                     output_shape=self.img_size,
                     order=1,            # 0=nearest, 1=bilinear, 3=bicubic; choose what you like
                     anti_aliasing=True  
                 )
 
-                msk = resize(
-                    msk,
-                    output_shape=self.img_size,
-                    order=1,            # 0=nearest, 1=bilinear, 3=bicubic; choose what you like
-                    anti_aliasing=True  
+            msk = resize(
+                msk,
+                output_shape=self.img_size,
+                order=1,            # 0=nearest, 1=bilinear, 3=bicubic; choose what you like
+                anti_aliasing=True  
                 )
-            case 1:
-                img, msk = img, msk
-            case 2:
+            
+        match aug:
+            case 0:
                 img = np.fliplr(img); msk = np.fliplr(msk)
-            case 3:
+            case 1:
                 img = np.flipud(img); msk = np.flipud(msk)
-            case 4:
+            case 2:
                 img = np.rot90(img, k=1); msk = np.rot90(msk, k=1)
-            case 5:
+            case 3:
                 img = np.rot90(img, k=2); msk = np.rot90(msk, k=2)
-            case 6:
+            case 4:
                 img = np.rot90(img, k=3); msk = np.rot90(msk, k=3)
+            case _:
+                img, msk = img, msk
+                
 
         return tuple([img.copy()[None, :, :], msk.copy()]) 
-
 dataset = CellSegmentationDataset(
     image_dir = os.path.join(data_dir, "image"),
     mask_dir  = os.path.join(data_dir, "mask"),
@@ -125,28 +127,66 @@ test_loader = DataLoader(
     prefetch_factor=2
 )
 
+# Visualize Data
+image_batch, mask_batch = next(iter(train_loader))
+n = min(8, image_batch.size(0))
 
-model = XBNet(base_chns = 16, n_group = 4, input_size = img_size, output_size = img_size).to(device)
+fig, axes = plt.subplots(n, 2, figsize=(6, 3 * n))
+for i in range(n):
+    # take channel 0 → shape (H, W)
+    img = image_batch[i, 0].cpu().numpy()
+    msk = mask_batch[i].cpu().numpy()
+
+    # Left: raw image
+    ax = axes[i, 0]
+    ax.imshow(img, cmap="gray")
+    ax.set_title(f"Image  #{i}")
+    ax.axis("off")
+
+    # Right: mask
+    ax = axes[i, 1]
+    ax.imshow(msk, cmap="jet", vmin=0, vmax=msk.max())
+    ax.set_title(f"Mask   #{i}")
+    ax.axis("off")
+
+plt.tight_layout()
+plt.show()
+
+fig, axes = plt.subplots(n, 1, figsize=(5, 3 * n))
+for i in range(n):
+    img = image_batch[i, 0].cpu().numpy()
+    msk = mask_batch[i].cpu().numpy()
+
+    ax = axes[i]
+    ax.imshow(img, cmap="gray")
+    ax.imshow(msk, cmap="jet", alpha=0.4, vmin=0, vmax=msk.max())
+    ax.set_title(f"Overlay #{i}")
+    ax.axis("off")
+
+plt.tight_layout()
+plt.show()
+
+# Optimizer and Model
+model = XBNet(base_chns = 32, n_group = 8).to(device)
 
 weights_arg = [1,10,5]
 weights = torch.tensor(weights_arg).to(device).float()
-
 criterion = F.cross_entropy
 
-optimizer = optim.Adam(model.parameters(), lr=1e-4)
+optimizer = torch.optim.AdamW(model.parameters(),lr=1e-4, betas=(0.9, 0.999), eps=1e-08, weight_decay=0.01, amsgrad=True)
 
 ckpt = {
-        "epoch": 0,
-        "model_state_dict": model.state_dict(),
-        "optimizer_state_dict": optimizer.state_dict(),
-        "train_history": [],
-        "test_history": [],
-    }
+    "epoch": 0,
+    "model_state_dict": model.state_dict(),
+    "optimizer_state_dict": optimizer.state_dict(),
+    "train_history": [],
+    "test_history": [],
+}
 
 torch.save(ckpt, os.path.join(out_dir, "model.pt"))
 
-from tqdm.auto import tqdm
-epochs = 30
+# Train
+epochs = 1000
 start_epoch = 0
 train_history = []
 test_history  = []
@@ -175,8 +215,6 @@ for epoch in range(epochs):
 
         optimizer.zero_grad()
         pred = model(image_batch)
-
-        # resize mask to pred’s H×W
         loss = criterion(pred, mask_batch, weight=weights)
         loss.backward()
         optimizer.step()
@@ -187,7 +225,6 @@ for epoch in range(epochs):
     # — evaluate on test set —
     model.eval()
     test_loss_accum = 0.0
-
     test_loader_tq = tqdm(
         test_loader,
         desc=f"Epoch {epoch+1}/{epochs} [Test ]",
@@ -225,6 +262,7 @@ for epoch in range(epochs):
 
     torch.save(ckpt, os.path.join(out_dir, "model.pt"))
 
+# Loss History
 plt.plot(train_history, label="Train Loss")
 plt.plot(test_history,  label="Test  Loss")
 plt.xlabel("Epoch")
@@ -234,7 +272,7 @@ plt.yscale('log')
 plt.legend()
 plt.show()
 
-# pull a batch from the test loader
+# Model eval
 model.eval()
 image_batch, gt_batch = next(iter(test_loader))
 
@@ -258,7 +296,7 @@ for i in range(n):
     # Predicted overlay
     ax = axes[i, 0]
     ax.imshow(img,       cmap="gray")
-    ax.imshow(pred_mask, cmap="jet", alpha=0.4, vmin=0, vmax=pred_mask.max())
+    ax.imshow(pred_mask, cmap="jet", alpha=0.4, vmin=0, vmax=gt_mask.max())
     ax.set_title(f"Predicted #{i}")
     ax.axis("off")
 

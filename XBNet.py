@@ -2,6 +2,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
+# Neural Network
 class ConvGN(nn.Module):
     def __init__(self, in_ch, out_ch, n_group, kernel_size=3, stride=1, padding=1, bias=False):
         super().__init__()
